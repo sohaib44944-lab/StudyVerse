@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StudyVerse</title>
+<style>
+:root {
+  --btn-dark: #444;
+  --btn-light: #ddd;
+  --btn-op: orange;
+  --btn-clear: #e74c3c;
+  --symbol-dark: rgba(255,255,255,0.08);
+  --symbol-light: rgba(0,0,0,0.1);
+  --grid-size: 20; /* snap grid size in px */
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  min-height: 100vh;
+  overflow: hidden;
+  transition: background 0.5s;
+  background: linear-gradient(135deg, #2c003e, #0d1b2a);
+}
+
+body.light {
+  background: linear-gradient(135deg, #d3f0ff, #ffffff);
+}
+
+/* Floating math symbols */
+.symbols {
+  position: absolute; top:0; left:0; right:0; bottom:0;
+  z-index:0; pointer-events:none;
+}
+.symbol {
+  position: absolute; font-size: 24px; user-select: none;
+  animation: float 20s linear infinite;
+}
+body.dark .symbol { color: var(--symbol-dark); }
+body.light .symbol { color: var(--symbol-light); }
+@keyframes float { 0% { transform: translateY(100vh) rotate(0deg); } 100% { transform: translateY(-10vh) rotate(360deg); } }
+
+/* Draggable and resizable elements */
+.draggable {
+  position: absolute;
+  z-index: 10;
+  cursor: move;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+}
+
+/* Resize handle */
+.resize-handle {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  background: orange;
+  right: 2px;
+  bottom: 2px;
+  cursor: se-resize;
+  border-radius: 3px;
+}
+
+/* Name top-right */
+.name { top: 15px; right: 20px; font-size: 36px; font-weight: bold; color: white; text-shadow: 0 0 8px orange; }
+
+/* Search bar */
+.search-container-top input { width: 250px; padding: 8px 12px; font-size: 16px; border-radius: 8px 0 0 8px; border: none; outline: none; }
+.search-container-top button { padding: 8px 15px; font-size: 16px; border-radius: 0 8px 8px 0; border: none; cursor: pointer; background: orange; color: white; }
+.search-container-top button:hover { opacity: 0.85; }
+
+/* Panel and calculator styles */
+.panel, .calculator {
+  background: rgba(0,0,0,0.7);
+  color: white;
+  border-radius: 15px;
+  padding: 15px;
+  width: 250px;
+  max-height: 80vh;
+  overflow-y: auto;
+  transition: background 0.5s, color 0.5s;
+}
+body.light .panel, body.light .calculator { background: rgba(240,240,240,0.95); color: #000; }
+
+.collapsible { cursor: pointer; font-weight: bold; margin-bottom: 10px; }
+.collapsible:after { content: '▼'; float: right; }
+.collapsible.active:after { content: '▲'; }
+.panel-content { display: none; }
+.panel-content.show { display: block; }
+
+.calculator { width: 300px; }
+.title { text-align: center; font-size: 28px; margin-bottom: 10px; }
+
+/* Calculator buttons */
+#display { width: 100%; height: 60px; font-size: 28px; text-align: right; padding: 10px; border-radius: 12px; border: none; margin-bottom: 10px; box-shadow: inset 0 2px 5px rgba(0,0,0,0.2); background: #fff; color: black; transition: background 0.5s, color 0.5s; }
+body.dark #display { background: #333; color: #fff; }
+body.light #display { background: #fff; color: #000; }
+
+.buttons { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+button.calc-btn { padding: 16px; font-size: 20px; border: none; border-radius: 12px; cursor: pointer; background: var(--btn-dark); color: #fff; box-shadow: 0 5px 10px rgba(0,0,0,0.3); }
+body.light .calc-btn { background: var(--btn-light); color: #000; box-shadow: 0 5px 10px rgba(0,0,0,0.1); }
+button.calc-btn:active { transform: scale(0.95); }
+
+.operator { background: var(--btn-op); color: #fff; }
+.clear { background: var(--btn-clear); color: #fff; grid-column: span 4; }
+
+.history { background: rgba(255,255,255,0.1); padding: 8px; max-height: 100px; overflow-y: auto; font-size: 14px; margin-top: 10px; border-radius: 8px; }
+body.light .history { background: rgba(0,0,0,0.05); color: #000; }
+
+footer { text-align: center; margin-top: 10px; font-size: 13px; opacity:0.7; }
+
+/* Inputs and flashcards */
+textarea, input.formula-input { width: 100%; padding:6px 8px; border-radius:6px; border:none; margin-bottom:5px; }
+button.add-formula { width:100%; padding:6px; border:none; border-radius:6px; background:orange; color:white; cursor:pointer; margin-bottom:5px; }
+.flashcard { background: rgba(255,255,255,0.1); padding:8px; border-radius:8px; margin-bottom:5px; cursor:pointer; }
+body.light .flashcard { background: rgba(0,0,0,0.05); color:#000; }
+</style>
+</head>
+<body class="dark">
+
+<div class="symbols" id="symbols"></div>
+
+<!-- Draggable Search Bar -->
+<div class="search-container-top draggable" id="search-bar" style="top:15px; left:20px;">
+  <input type="text" id="study-search" placeholder="Search study topics..." />
+  <button onclick="searchTopic()">Search</button>
+  <div class="resize-handle"></div>
+</div>
+
+<!-- Draggable Name -->
+<div class="name draggable" id="name" style="top:15px; right:20px;">StudyVerse</div>
+
+<!-- Draggable Formula Panel -->
+<div class="panel draggable" id="formula-panel" style="top:100px; left:20px;">
+  <div class="collapsible" onclick="togglePanel(this)">Formulas</div>
+  <div class="panel-content show" id="formula-content">
+    <ul id="formula-list">
+      <li>E = mc²</li>
+      <li>a² + b² = c²</li>
+      <li>F = ma</li>
+    </ul>
+    <input type="text" id="new-formula" class="formula-input" placeholder="Add new formula..." />
+    <button class="add-formula" onclick="addFormula()">Add Formula</button>
+  </div>
+  <div class="resize-handle"></div>
+</div>
+
+<!-- Draggable Calculator -->
+<div class="calculator draggable" id="calculator" style="top:100px; left:300px;">
+  <div class="title">Calculator</div>
+  <div class="toggle"><button onclick="toggleMode()">🌙 / ☀️</button></div>
+  <input id="display" disabled>
+  <div class="buttons">
+    <button class="calc-btn" onclick="press('7')">7</button>
+    <button class="calc-btn" onclick="press('8')">8</button>
+    <button class="calc-btn" onclick="press('9')">9</button>
+    <button class="calc-btn operator" onclick="press('/')">÷</button>
+
+    <button class="calc-btn" onclick="press('4')">4</button>
+    <button class="calc-btn" onclick="press('5')">5</button>
+    <button class="calc-btn" onclick="press('6')">6</button>
+    <button class="calc-btn operator" onclick="press('*')">×</button>
+
+    <button class="calc-btn" onclick="press('1')">1</button>
+    <button class="calc-btn" onclick="press('2')">2</button>
+    <button class="calc-btn" onclick="press('3')">3</button>
+    <button class="calc-btn operator" onclick="press('-')">−</button>
+
+    <button class="calc-btn" onclick="press('0')">0</button>
+    <button class="calc-btn" onclick="press('.')">.</button>
+    <button class="calc-btn" onclick="calculate()">=</button>
+    <button class="calc-btn operator" onclick="press('+')">+</button>
+
+    <button class="calc-btn clear" onclick="clearDisplay()">Clear</button>
+  </div>
+  <div class="history" id="history"></div>
+  <footer>Made by Sohaib</footer>
+  <div class="resize-handle"></div>
+</div>
+
+<!-- Draggable Notes Panel -->
+<div class="panel draggable" id="notes-panel" style="top:100px; left:650px;">
+  <div class="collapsible" onclick="togglePanel(this)">Notes</div>
+  <div class="panel-content show">
+    <textarea id="notes" placeholder="Write your notes here..." style="height:150px;"></textarea>
+    <button onclick="saveNotes()" style="margin-top:5px;width:100%;padding:8px;border:none;border-radius:6px;background:orange;color:white;cursor:pointer;">Save Notes</button>
+    <div style="margin-top:10px;">
+      <h3>Flashcards / Mini Quiz</h3>
+      <div id="flashcards"></div>
+      <input type="text" id="new-card-front" placeholder="Question/Front" class="formula-input">
+      <input type="text" id="new-card-back" placeholder="Answer/Back" class="formula-input">
+      <button class="add-formula" onclick="addFlashcard()">Add Flashcard</button>
+    </div>
+  </div>
+  <div class="resize-handle"></div>
+</div>
+
+<audio id="click">
+<source src="https://assets.mixkit.co/sfx/preview/mixkit-select-click-1109.mp3">
+</audio>
+
+<script>
+// Floating symbols
+const symbolsArr=['+','-','×','÷','=','√','π','∑','∫'];
+const container=document.getElementById("symbols");
+for(let i=0;i<50;i++){
+  const s=document.createElement('div'); s.className='symbol';
+  s.style.left=Math.random()*100+'vw';
+  s.style.fontSize=20+Math.random()*30+'px';
+  s.innerText=symbolsArr[Math.floor(Math.random()*symbolsArr.length)];
+  s.style.animationDuration=(10+Math.random()*20)+'s';
+  container.appendChild(s);
+}
+
+// Calculator
+const display=document.getElementById("display");
+const historyDiv=document.getElementById("history");
+const click=document.getElementById("click");
+const notes = document.getElementById("notes");
+if(localStorage.getItem("studyhub_notes")) notes.value = localStorage.getItem("studyhub_notes");
+
+function sound(){ click.currentTime=0; click.play(); }
+function press(v){ sound(); display.value+=v; }
+function calculate(){ sound(); try{ const res=eval(display.value); historyDiv.innerHTML+=`<div>${display.value} = ${res}</div>`; display.value=res; } catch { display.value="Error"; } }
+function clearDisplay(){ sound(); display.value=""; }
+function toggleMode(){ document.body.classList.toggle("light"); }
+function togglePanel(el){ el.classList.toggle("active"); const content = el.nextElementSibling; content.classList.toggle("show"); }
+
+document.addEventListener("keydown",e=>{
+  if("0123456789+-*/.".includes(e.key)) press(e.key);
+  if(e.key==="Enter") calculate();
+  if(e.key==="Backspace") display.value=display.value.slice(0,-1);
+  if(e.key==="Escape") clearDisplay();
+});
+
+function searchTopic(){ const query = document.getElementById("study-search").value.trim(); if(query) window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, "_blank"); }
+function saveNotes(){ localStorage.setItem("studyhub_notes", notes.value); alert("Notes saved!"); }
+
+// Formulas
+function addFormula(){ const val = document.getElementById("new-formula").value.trim(); if(val){ const li = document.createElement("li"); li.textContent = val; document.getElementById("formula-list").appendChild(li); document.getElementById("new-formula").value = ''; } }
+
+// Flashcards
+let flashcards = [];
+function addFlashcard(){ const front = document.getElementById("new-card-front").value.trim(); const back = document.getElementById("new-card-back").value.trim(); if(front && back){ flashcards.push({front, back, shown:false}); renderFlashcards(); document.getElementById("new-card-front").value=''; document.getElementById("new-card-back").value=''; } }
+function renderFlashcards(){ const container = document.getElementById("flashcards"); container.innerHTML=''; flashcards.forEach((card,index)=>{ const div = document.createElement('div'); div.className='flashcard'; div.textContent = card.shown ? card.back : card.front; div.onclick = ()=>{ card.shown=!card.shown; renderFlashcards(); }; container.appendChild(div); }); }
+
+// Drag & Drop with Resize + Snap + Save (Fixed)
+function makeDraggableResizable(el,id){
+  const storageKey = `studyverse_${id}`;
+  let offsetX=0, offsetY=0, isDown=false;
+  let resizing=false;
+
+  const handle = el.querySelector(".resize-handle");
+
+  // Restore position and size
+  const saved = localStorage.getItem(storageKey);
+  if(saved){
+    const data = JSON.parse(saved);
+    el.style.left = data.left+'px';
+    el.style.top = data.top+'px';
+    el.style.width = data.width+'px';
+    el.style.height = data.height+'px';
+  }
+
+  el.addEventListener('mousedown', (e)=>{
+    if(e.target===handle){ resizing=true; return; }
+    isDown=true;
+    offsetX = e.clientX - el.offsetLeft;
+    offsetY = e.clientY - el.offsetTop;
+    el.style.zIndex = 20;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e)=>{
+    if(isDown){
+      let x = e.clientX - offsetX;
+      let y = e.clientY - offsetY;
+      x = Math.round(x/20)*20;
+      y = Math.round(y/20)*20;
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+    } else if(resizing){
+      const rect = el.getBoundingClientRect();
+      let newWidth = e.clientX - rect.left;
+      let newHeight = e.clientY - rect.top;
+      el.style.width = Math.max(150,newWidth)+'px';
+      el.style.height = Math.max(100,newHeight)+'px';
+    }
+  });
+  document.addEventListener('mouseup', ()=>{
+    if(isDown || resizing){
+      isDown=false; resizing=false; el.style.zIndex=10;
+      localStorage.setItem(storageKey, JSON.stringify({
+        left: parseInt(el.style.left),
+        top: parseInt(el.style.top),
+        width: parseInt(el.offsetWidth),
+        height: parseInt(el.offsetHeight)
+      }));
+    }
+  });
+
+  // Touch support
+  el.addEventListener('touchstart', e=>{
+    const touch = e.touches[0];
+    if(e.target===handle){ resizing=true; return; }
+    isDown=true;
+    offsetX = touch.clientX - el.offsetLeft;
+    offsetY = touch.clientY - el.offsetTop;
+    e.preventDefault();
+  });
+  document.addEventListener('touchmove', e=>{
+    const touch = e.touches[0];
+    if(isDown){
+      let x = touch.clientX - offsetX;
+      let y = touch.clientY - offsetY;
+      x = Math.round(x/20)*20;
+      y = Math.round(y/20)*20;
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+    } else if(resizing){
+      const rect = el.getBoundingClientRect();
+      let newWidth = touch.clientX - rect.left;
+      let newHeight = touch.clientY - rect.top;
+      el.style.width = Math.max(150,newWidth)+'px';
+      el.style.height = Math.max(100,newHeight)+'px';
+    }
+  });
+  document.addEventListener('touchend', ()=>{ isDown=false; resizing=false; });
+}
+
+// Apply to all draggable panels
+['search-bar','name','formula-panel','calculator','notes-panel'].forEach(id=>{
+  makeDraggableResizable(document.getElementById(id),id);
+});
+</script>
+
+</body>
+</html>
